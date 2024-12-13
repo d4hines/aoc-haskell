@@ -1,41 +1,57 @@
-import Text.Read (readMaybe)
+import Control.Monad (void)
 import Data.Maybe (catMaybes)
+import Data.Void
+import Text.Megaparsec
+import Text.Megaparsec.Char
 
-readMaybeInt :: String -> Maybe Int
-readMaybeInt = readMaybe
+type Parser = Parsec Void String
 
-parseLine :: String -> [Int]
-parseLine line = catMaybes $ map readMaybeInt (words line)
 
-diffInRange :: Int -> Int -> Bool
-diffInRange x y = let diff = abs $ x - y in diff >= 1 && diff <= 3
+parseMul :: P.Parsec v String Int
+parseMul = product <$> P.between "mul(" ")" (numberParser `P.sepBy` ",")
 
-cb :: [Int] -> Bool
-cb [] = True
-cb (_x : []) = True
-cb (x : y : [] ) = diffInRange x y
-cb (x : y : z : rest) =
-    let diff = x - y
-        diff' = y - z 
-        monotonicSoFar = (diff >= 0 && diff' >= 0) || (diff < 0 && diff' < 0)
-    in
-        monotonicSoFar && diffInRange x y && cb (y : z : rest)
+part1 :: Parsec v Int
+part1 = sum <$> many (dropUntil parseMul)
 
--- Part 1
--- main :: IO ()
--- main = do
---     contents <- readFile "./puzzles/02/input"
---     let l = [1,2,3]
---     putStrLn $ (show $ length $ filter id $ map (cb . parseLine) (lines contents))
 
-removeEachElement :: [a] -> [[a]]
-removeEachElement xs = [take i xs ++ drop (i + 1) xs | i <- [0..length xs - 1]]
+numberParser :: Parser Int
+numberParser = do
+    digits <- many digitChar
+    if length digits > 3
+        then
+            fail "Number too long"
+        else
+            pure $ read digits
+
+parseMul :: Parsœer Int
+
+validMul :: Parser (Maybe (Int, Int))
+validMul = do
+    _ <- string "mul("
+    n1 <- numberParser
+    _ <- char ','
+    n2 <- numberParser
+    _ <- char ')'
+    return (Just (n1, n2))
+
+-- Skip any character that isn't the start of a valid mul
+skipJunk :: Parser (Maybe (Int, Int))
+skipJunk = do
+    () <- void $ manyTill anySingle (lookAhead (void $ string "mul(") <|> eof)
+    pure Nothing
+
+skipOne :: Parser (Maybe (Int, Int))
+skipOne = do
+    void anySingle
+    pure Nothing
+
+langParser :: Parser [Maybe (Int, Int)]
+langParser = catMaybes <$> many (skipJunk *> optional validMul)
 
 main :: IO ()
 main = do
-    contents <- readFile "./puzzles/02/input"
-    let l = map parseLine (lines contents)
-    let all = map (\l' -> l' : removeEachElement l') l
-    let matching = filter (any cb) all
-    putStrLn $ show (length matching)
-
+    contents <- readFile "./puzzles/03/test"
+    putStrLn "Running"
+    case parse langParser "" contents of
+        Left err -> putStrLn $ errorBundlePretty err
+        Right l -> print l
